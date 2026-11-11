@@ -11,7 +11,7 @@ import streamlit as st
 # CONFIGURAZIONE INTERFACCIA STREAMLIT
 # ==============================================================================
 st.set_page_config(
-    page_title="LOADBANK-MASTER | Busbar 2D FDM In/Out Opposti + Verifiche Rev. 2.5",
+    page_title="LOADBANK-MASTER | Busbar 2D FDM In/Out Opposti + Verifiche Rev. 2.6",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -78,6 +78,12 @@ K7_BASE_TABLE = {1: 1.00, 2: 1.79, 3: 2.45, 4: 3.10, 5: 3.70, 6: 4.30}
 
 MODO_ORIZZ = "Orizzontale (0° - Piega lungo X, ala di piatto)"
 MODO_VERT = "Verticale (90° - Piega lungo Y, ala di costa)"
+
+PIASTRA_VERT = "Verticale (Sviluppo principale lungo Y)"
+PIASTRA_ORIZZ = "Orizzontale (Sviluppo principale lungo X)"
+
+POSA_PIA_COSTA = "Di costa (Piano X-Y verticale, K8 = 1,00)"
+POSA_PIA_PIATTO = "Di piatto (Piano X-Y orizzontale parallelo al suolo, K8 ridotto)"
 
 
 # ==============================================================================
@@ -261,27 +267,54 @@ st.sidebar.caption(
 )
 
 st.sidebar.header("2. Piastra Collettrice")
-B_piastra = st.sidebar.number_input("Larghezza Piastra B [mm]", min_value=50.0, max_value=1500.0, value=250.0, step=10.0)
-H_piastra = st.sidebar.number_input("Altezza Piastra H [mm]", min_value=200.0, max_value=3000.0, value=1000.0, step=50.0)
+orient_piastra = st.sidebar.radio(
+    "Orientamento Sviluppo Piastra Collettrice",
+    options=[PIASTRA_VERT, PIASTRA_ORIZZ],
+    index=0,
+    help="Seleziona se la piastra collettrice si sviluppa prevalentemente in verticale (lungo Y) o in orizzontale (lungo X). Adatta automaticamente anche l'impaginazione dei grafici."
+)
+is_piastra_orizz = (orient_piastra == PIASTRA_ORIZZ)
+tag_orient = "H" if is_piastra_orizz else "V"
+
+posa_termica_piastra = st.sidebar.selectbox(
+    "Giacitura Termica Piastra nello Spazio (K8)",
+    options=[POSA_PIA_COSTA, POSA_PIA_PIATTO],
+    index=0,
+    help="Di costa: piano X-Y della piastra verticale (convezione ottimale K8=1,00). Di piatto: piastra stesa orizzontalmente parallela al pavimento (K8 ridotto)."
+)
+giacitura_costa_piastra = (posa_termica_piastra == POSA_PIA_COSTA)
+
+B_def = 1000.0 if is_piastra_orizz else 250.0
+H_def = 250.0 if is_piastra_orizz else 1000.0
+label_B = "Lunghezza Orizzontale Piastra B (asse X) [mm]" if is_piastra_orizz else "Larghezza Piastra B (asse X) [mm]"
+label_H = "Altezza/Larghezza Piastra H (asse Y) [mm]" if is_piastra_orizz else "Altezza Verticale Piastra H (asse Y) [mm]"
+
+B_piastra = st.sidebar.number_input(
+    label_B, min_value=50.0, max_value=3000.0, value=B_def, step=25.0, key=f"B_pia_{tag_orient}"
+)
+H_piastra = st.sidebar.number_input(
+    label_H, min_value=50.0, max_value=3000.0, value=H_def, step=25.0, key=f"H_pia_{tag_orient}"
+)
 s_piastra = st.sidebar.number_input("Spessore Singola Piastra s [mm]", min_value=3.0, max_value=30.0, value=10.0, step=1.0)
 n_piastra = st.sidebar.selectbox("Numero Piastre Accoppiate // (n_P)", options=[1, 2, 3, 4], index=0)
 d_piastra = 0.0 if n_piastra == 1 else st.sidebar.number_input("Distanza netta tra piastre d_P [mm]", min_value=0.0, max_value=100.0, value=10.0, step=1.0)
 I_totale = st.sidebar.number_input("Corrente Totale Iniettata dal Ramo IN [A]", min_value=100.0, max_value=40000.0, value=3600.0, step=100.0)
 
 
-def configura_barra_sidebar(id_barra, titolo_sezione, x_def, y_def, orient_def_idx, lato_def_idx, n_def_idx=1, w_def=120.0):
+def configura_barra_sidebar(id_barra, titolo_sezione, x_def, y_def, orient_def_idx, lato_def_idx, n_def_idx=1, w_def=120.0, suffisso_modo="V"):
     st.sidebar.subheader(titolo_sezione)
-    orient = st.sidebar.selectbox(f"Orientamento Barra {id_barra}", [MODO_ORIZZ, MODO_VERT], index=orient_def_idx, key=f"or_{id_barra}")
-    n_b = st.sidebar.selectbox(f"Numero Sbarre in Parallelo // ({id_barra})", options=[1, 2, 3, 4, 5, 6], index=n_def_idx, key=f"n_{id_barra}")
+    k_uid = f"{id_barra}_{suffisso_modo}"
+    orient = st.sidebar.selectbox(f"Orientamento Barra {id_barra}", [MODO_ORIZZ, MODO_VERT], index=orient_def_idx, key=f"or_{k_uid}")
+    n_b = st.sidebar.selectbox(f"Numero Sbarre in Parallelo // ({id_barra})", options=[1, 2, 3, 4, 5, 6], index=n_def_idx, key=f"n_{k_uid}")
     d_b = 0.0 if n_b == 1 else st.sidebar.number_input(
         f"Distanza netta d tra sbarre sul tratto a sbalzo ({id_barra}) [mm]",
-        min_value=0.0, max_value=150.0, value=10.0, step=1.0, key=f"d_{id_barra}",
+        min_value=0.0, max_value=150.0, value=10.0, step=1.0, key=f"d_{k_uid}",
         help="Sul sormonto imbullonato le sbarre sono a contatto (d=0 mm); sul tratto a sbalzo dopo la piega sono distanziate di d."
     )
-    w_b = st.sidebar.number_input(f"Larghezza Barra {id_barra} (h) [mm]", min_value=20.0, max_value=800.0, value=float(w_def), step=10.0, key=f"w_{id_barra}")
-    h_b = st.sidebar.number_input(f"Profondità Sormonto {id_barra} [mm]", min_value=15.0, max_value=400.0, value=60.0, step=5.0, key=f"h_{id_barra}")
-    s_b = st.sidebar.number_input(f"Spessore Singola Barra {id_barra} (s) [mm]", min_value=3.0, max_value=30.0, value=10.0, step=1.0, key=f"s_{id_barra}")
-    L_b = st.sidebar.number_input(f"Lunghezza Ramo {id_barra} a sbalzo su piastra [mm]", min_value=20.0, max_value=1500.0, value=120.0, step=10.0, key=f"L_{id_barra}")
+    w_b = st.sidebar.number_input(f"Larghezza Barra {id_barra} (h) [mm]", min_value=20.0, max_value=800.0, value=float(w_def), step=10.0, key=f"w_{k_uid}")
+    h_b = st.sidebar.number_input(f"Profondità Sormonto {id_barra} [mm]", min_value=15.0, max_value=400.0, value=60.0, step=5.0, key=f"h_{k_uid}")
+    s_b = st.sidebar.number_input(f"Spessore Singola Barra {id_barra} (s) [mm]", min_value=3.0, max_value=30.0, value=10.0, step=1.0, key=f"s_{k_uid}")
+    L_b = st.sidebar.number_input(f"Lunghezza Ramo {id_barra} a sbalzo su piastra [mm]", min_value=20.0, max_value=1500.0, value=120.0, step=10.0, key=f"L_{k_uid}")
 
     spess_sorm_z = n_b * s_b
     spess_fascio_ala = n_b * s_b + (n_b - 1) * d_b
@@ -298,7 +331,7 @@ def configura_barra_sidebar(id_barra, titolo_sezione, x_def, y_def, orient_def_i
         lato_piega = st.sidebar.selectbox(
             f"Bordo di stacco piega a sbalzo ({id_barra})",
             ["Bordo Inferiore del Sormonto", "Bordo Superiore del Sormonto"],
-            index=lato_def_idx, key=f"lato_{id_barra}"
+            index=lato_def_idx, key=f"lato_{k_uid}"
         )
         giacitura_ala_costa = False
         posa_str = "Di piatto (lato h orizzontale)"
@@ -307,16 +340,16 @@ def configura_barra_sidebar(id_barra, titolo_sezione, x_def, y_def, orient_def_i
         lato_piega = st.sidebar.selectbox(
             f"Bordo di stacco piega a sbalzo ({id_barra})",
             ["Bordo Sinistro del Sormonto", "Bordo Destro del Sormonto"],
-            index=lato_def_idx, key=f"lato_{id_barra}"
+            index=lato_def_idx, key=f"lato_{k_uid}"
         )
         giacitura_ala_costa = True
         posa_str = "Di costa (lato h verticale)"
 
     if dx_sorm > B_piastra:
-        st.error(f"Errore geometrico Barra {id_barra}: La larghezza impronta ({dx_sorm:.0f} mm) supera la larghezza piastra ({B_piastra:.0f} mm).")
+        st.error(f"Errore geometrico Barra {id_barra}: La larghezza impronta lungo X ({dx_sorm:.0f} mm) supera la dimensione X della piastra ({B_piastra:.0f} mm).")
         st.stop()
     if dy_sorm > H_piastra:
-        st.error(f"Errore geometrico Barra {id_barra}: L'altezza impronta ({dy_sorm:.0f} mm) supera l'altezza piastra ({H_piastra:.0f} mm).")
+        st.error(f"Errore geometrico Barra {id_barra}: L'altezza impronta lungo Y ({dy_sorm:.0f} mm) supera la dimensione Y della piastra ({H_piastra:.0f} mm).")
         st.stop()
 
     min_x = dx_sorm / 2.0
@@ -326,22 +359,22 @@ def configura_barra_sidebar(id_barra, titolo_sezione, x_def, y_def, orient_def_i
 
     if min_x >= max_x:
         x_sorm = float(B_piastra / 2.0)
-        st.sidebar.info(f"Quota X Centro Barra {id_barra}: **{x_sorm:.1f} mm** (centrata a tutta larghezza)")
+        st.sidebar.info(f"Quota X Centro Barra {id_barra}: **{x_sorm:.1f} mm** (centrata a tutta larghezza X)")
     else:
         x_sorm = st.sidebar.slider(
             f"Quota X Centro Sormonto Barra {id_barra} [mm]",
             min_value=float(min_x), max_value=float(max_x),
-            value=float(min(max(x_def, min_x), max_x)), step=5.0, key=f"xs_{id_barra}"
+            value=float(min(max(x_def, min_x), max_x)), step=5.0, key=f"xs_{k_uid}"
         )
 
     if min_y >= max_y:
         y_sorm = float(H_piastra / 2.0)
-        st.sidebar.info(f"Quota Y Centro Barra {id_barra}: **{y_sorm:.1f} mm** (centrata a tutta altezza)")
+        st.sidebar.info(f"Quota Y Centro Barra {id_barra}: **{y_sorm:.1f} mm** (centrata a tutta altezza Y)")
     else:
         y_sorm = st.sidebar.slider(
             f"Quota Y Centro Sormonto Barra {id_barra} [mm]",
             min_value=float(min_y), max_value=float(max_y),
-            value=float(min(max(y_def, min_y), max_y)), step=5.0, key=f"ys_{id_barra}"
+            value=float(min(max(y_def, min_y), max_y)), step=5.0, key=f"ys_{k_uid}"
         )
 
     if orient == MODO_ORIZZ:
@@ -385,16 +418,18 @@ def configura_barra_sidebar(id_barra, titolo_sezione, x_def, y_def, orient_def_i
 
 
 st.sidebar.header("3. Ramo in Ingresso (Lato Opposto Z ≤ 0)")
-cfg_IN = configura_barra_sidebar(
-    "IN",
-    "3.IN Ramo Ingresso (Faccia Posteriore)",
-    x_def=B_piastra / 2.0,
-    y_def=H_piastra - 100.0,
-    orient_def_idx=0,
-    lato_def_idx=1,
-    n_def_idx=2,
-    w_def=120.0
-)
+if is_piastra_orizz:
+    cfg_IN = configura_barra_sidebar(
+        "IN", "3.IN Ramo Ingresso (Faccia Posteriore)",
+        x_def=100.0, y_def=H_piastra / 2.0,
+        orient_def_idx=1, lato_def_idx=0, n_def_idx=2, w_def=120.0, suffisso_modo=tag_orient
+    )
+else:
+    cfg_IN = configura_barra_sidebar(
+        "IN", "3.IN Ramo Ingresso (Faccia Posteriore)",
+        x_def=B_piastra / 2.0, y_def=H_piastra - 100.0,
+        orient_def_idx=0, lato_def_idx=1, n_def_idx=2, w_def=120.0, suffisso_modo=tag_orient
+    )
 
 st.sidebar.header("4. Configurazione Rami in Uscita (Lato Anteriore Z ≥ Z_p)")
 config_rami = st.sidebar.radio(
@@ -406,15 +441,30 @@ config_rami = st.sidebar.radio(
 attiva_A = config_rami in ("Solo A", "A + B")
 attiva_B = config_rami in ("Solo B", "A + B")
 
-cfg_A = configura_barra_sidebar(
-    "A", "4A. Ramo A in Uscita (Faccia Anteriore)",
-    x_def=B_piastra / 2.0, y_def=80.0, orient_def_idx=0, lato_def_idx=0, n_def_idx=1, w_def=120.0
-) if attiva_A else None
+if is_piastra_orizz:
+    cfg_A = configura_barra_sidebar(
+        "A", "4A. Ramo A in Uscita (Faccia Anteriore)",
+        x_def=B_piastra - 80.0, y_def=H_piastra / 2.0,
+        orient_def_idx=1, lato_def_idx=1, n_def_idx=1, w_def=120.0, suffisso_modo=tag_orient
+    ) if attiva_A else None
 
-cfg_B = configura_barra_sidebar(
-    "B", "4B. Ramo B in Uscita (Faccia Anteriore)",
-    x_def=B_piastra / 2.0, y_def=480.0, orient_def_idx=0, lato_def_idx=0, n_def_idx=1, w_def=120.0
-) if attiva_B else None
+    cfg_B = configura_barra_sidebar(
+        "B", "4B. Ramo B in Uscita (Faccia Anteriore)",
+        x_def=B_piastra / 2.0, y_def=H_piastra / 2.0,
+        orient_def_idx=1, lato_def_idx=1, n_def_idx=1, w_def=120.0, suffisso_modo=tag_orient
+    ) if attiva_B else None
+else:
+    cfg_A = configura_barra_sidebar(
+        "A", "4A. Ramo A in Uscita (Faccia Anteriore)",
+        x_def=B_piastra / 2.0, y_def=80.0,
+        orient_def_idx=0, lato_def_idx=0, n_def_idx=1, w_def=120.0, suffisso_modo=tag_orient
+    ) if attiva_A else None
+
+    cfg_B = configura_barra_sidebar(
+        "B", "4B. Ramo B in Uscita (Faccia Anteriore)",
+        x_def=B_piastra / 2.0, y_def=480.0,
+        orient_def_idx=0, lato_def_idx=0, n_def_idx=1, w_def=120.0, suffisso_modo=tag_orient
+    ) if attiva_B else None
 
 st.sidebar.markdown("---")
 st.sidebar.info(
@@ -423,9 +473,9 @@ st.sidebar.info(
 )
 
 # ==============================================================================
-# 4. INTESTAZIONE, VERIFICHE GEOMETRICHE E CALCOLO REV. 2.5
+# 4. INTESTAZIONE, VERIFICHE GEOMETRICHE E CALCOLO REV. 2.6
 # ==============================================================================
-st.title("⚡ LOADBANK-MASTER | Progettazione Elettrotermica e Meccanica Busbar (Ingresso Lato Opposto + 2 Uscite)")
+st.title("⚡ LOADBANK-MASTER | Progettazione Elettrotermica e Meccanica Busbar (Piastra Verticale/Orizzontale + In/Out Opposti)")
 st.markdown(
     """
     **Quadro Normativo Applicato:**  
@@ -461,21 +511,24 @@ if attiva_A and attiva_B:
 if attiva_A and (xIN1 < xA2) and (xIN2 > xA1) and (yIN1 < yA2) and (yIN2 > yA1):
     st.warning(
         "⚠️ **Nota DFM Bulloneria Passante (IN vs A):** L'impronta del Ramo IN (faccia posteriore) si sovrappone parzialmente in pianta (X-Y) "
-        "a quella del Ramo A (faccia anteriore). Prevedere bulloneria passante unificata o disassare le quote Y dei sormonti."
+        "a quella del Ramo A (faccia anteriore). Prevedere bulloneria passante unificata o disassare le quote dei sormonti."
     )
 if attiva_B and (xIN1 < xB2) and (xIN2 > xB1) and (yIN1 < yB2) and (yIN2 > yB1):
     st.warning(
         "⚠️ **Nota DFM Bulloneria Passante (IN vs B):** L'impronta del Ramo IN (faccia posteriore) si sovrappone parzialmente in pianta (X-Y) "
-        "a quella del Ramo B (faccia anteriore). Prevedere bulloneria passante unificata o disassare le quote Y dei sormonti."
+        "a quella del Ramo B (faccia anteriore). Prevedere bulloneria passante unificata o disassare le quote dei sormonti."
     )
 
 forma_normale = list(FORMA_K6.keys())[0]
+dim_trasv_piastra = H_piastra if is_piastra_orizz else B_piastra
+lungh_assiale_piastra_m = (B_piastra if is_piastra_orizz else H_piastra) / 1000.0
+
 mb_piastra = esegui_calcolo_completo(
-    B_piastra, s_piastra, n_piastra, d_piastra, True,
+    dim_trasv_piastra, s_piastra, n_piastra, d_piastra, giacitura_costa_piastra,
     mat_scelto, freq_in, tamb_in, dt_in, vent_in, sup_in, forma_normale,
-    H_piastra / 1000.0, t_lim_cw_in, ik_in
+    lungh_assiale_piastra_m, t_lim_cw_in, ik_in
 )
-mb_piastra["nota_acc"] = f"Appoggio ideale - Piastra n={n_piastra} (d={d_piastra:.0f} mm)"
+mb_piastra["nota_acc"] = f"Piastra {'Orizzontale' if is_piastra_orizz else 'Verticale'} n={n_piastra} (d={d_piastra:.0f} mm)"
 
 mb_IN = esegui_calcolo_completo(
     cfg_IN["w"], cfg_IN["s"], cfg_IN["n"], cfg_IN["d"], cfg_IN["costa"],
@@ -517,8 +570,8 @@ def risolvi_busbar_2d(
     sigma = 1.0 / rho
 
     mesh_sz = 4.0 if (B * H) <= 600000 else 6.0
-    nx = max(14, int(round(B / mesh_sz)))
-    ny = max(24, int(round(H / mesh_sz)))
+    nx = max(18, int(round(B / mesh_sz)))
+    ny = max(18, int(round(H / mesh_sz)))
     dx = B / nx
     dy = H / ny
     x_c = (np.arange(nx) + 0.5) * dx
@@ -606,6 +659,7 @@ def risolvi_busbar_2d(
     Jy = -sigma * dV_dy
     J_mag = np.sqrt(Jx ** 2 + Jy ** 2)
     profilo_Iy = np.sum(Jy, axis=1) * dx * s_eff_p
+    profilo_Ix = np.sum(Jx, axis=0) * dy * s_eff_p
 
     P_elettrod_piastra_uscite = float(I_vec @ V)
     P_ramo_IN = (I_tot ** 2) * R_IN
@@ -617,7 +671,7 @@ def risolvi_busbar_2d(
         "x": x_c, "y": y_c, "X": X, "Y": Y,
         "V_mV": V_2d * 1e3, "Jx": Jx, "Jy": Jy, "J_mag": J_mag,
         "I_IN": I_tot, "I_A": I_A, "I_B": I_B, "err_perc": err_perc,
-        "profilo_Iy": profilo_Iy,
+        "profilo_Iy": profilo_Iy, "profilo_Ix": profilo_Ix,
         "P_piastra": P_piastra, "P_IN": P_ramo_IN, "P_A": P_ramo_A, "P_B": P_ramo_B,
         "R_IN_uohm": R_IN * 1e6, "R_A_uohm": R_A * 1e6, "R_B_uohm": R_B * 1e6
     }
@@ -652,7 +706,9 @@ sez_piastra = mb_piastra["sez_tot"]
 J_L_IN = I_totale / sez_IN
 J_L_A = res["I_A"] / sez_A if attiva_A else 0.0
 J_L_B = (res["I_B"] / sez_B) if attiva_B else 0.0
-I_sez_piastra_max = float(np.max(np.abs(res["profilo_Iy"])))
+
+profilo_principale = res["profilo_Ix"] if is_piastra_orizz else res["profilo_Iy"]
+I_sez_piastra_max = float(np.max(np.abs(profilo_principale)))
 J_sez_piastra_max = I_sez_piastra_max / sez_piastra
 J_99_piastra = float(np.percentile(res["J_mag"], 99))
 P_tot = res["P_piastra"] + res["P_IN"] + res["P_A"] + res["P_B"]
@@ -719,7 +775,7 @@ else:
     col2.metric("Ramo B (escluso)", "Non presente")
 
 col3.metric(
-    label=f"Piastra (Amm: {mb_piastra['I_amm']:.0f} A | Icw={mb_piastra['Icw_1s_IEC']:.1f} kA)",
+    label=f"Piastra {'Orizz.' if is_piastra_orizz else 'Vert.'} (Amm: {mb_piastra['I_amm']:.0f} A | K8={mb_piastra['K8']:.2f})",
     value=f"{I_sez_piastra_max:.0f} A ({J_sez_piastra_max:.2f} A/mm²)",
     delta=f"J_amm Piastra = {mb_piastra['J_amm']:.2f} A/mm²",
     delta_color="inverse" if I_sez_piastra_max > mb_piastra["I_amm"] else "normal"
@@ -734,17 +790,31 @@ col4.metric(
 st.markdown("---")
 
 # ==============================================================================
-# 7. DASHBOARD GRAFICA 2D FDM E LAYOUT MECCANICO A 5 VISTE
+# 7. DASHBOARD GRAFICA 2D FDM E LAYOUT ADATTIVO (VERTICALE 1x5 / ORIZZONTALE 3x2)
 # ==============================================================================
-st.subheader("🗺️ Mappa Elettrodinamica 2D FDM e Proiezioni Meccaniche (Ingresso Z ≤ 0 vs Uscite Z ≥ Z_piastra)")
-fig = plt.figure(figsize=(26, 10))
-gs = fig.add_gridspec(1, 5, width_ratios=[1.0, 1.0, 0.95, 0.95, 1.05])
+titolo_layout = (
+    "Layout Orizzontale 3×2 Allineato lungo X"
+    if is_piastra_orizz
+    else "Layout Verticale 1×5 Allineato lungo Y"
+)
+st.subheader(f"🗺️ Mappa Elettrodinamica 2D FDM e Proiezioni Meccaniche ({titolo_layout})")
 
-ax1 = fig.add_subplot(gs[0, 0])
-ax2 = fig.add_subplot(gs[0, 1])
-ax3 = fig.add_subplot(gs[0, 2])
-ax4 = fig.add_subplot(gs[0, 3])
-ax5 = fig.add_subplot(gs[0, 4])
+if is_piastra_orizz:
+    fig = plt.figure(figsize=(22, 14))
+    gs = fig.add_gridspec(3, 2, width_ratios=[1.15, 1.0], height_ratios=[1.0, 1.0, 1.05])
+    ax1 = fig.add_subplot(gs[0, 0])
+    ax2 = fig.add_subplot(gs[1, 0])
+    ax3 = fig.add_subplot(gs[2, 0])
+    ax5 = fig.add_subplot(gs[0:2, 1])
+    ax4 = fig.add_subplot(gs[2, 1])
+else:
+    fig = plt.figure(figsize=(26, 10))
+    gs = fig.add_gridspec(1, 5, width_ratios=[1.0, 1.0, 0.95, 0.95, 1.05])
+    ax1 = fig.add_subplot(gs[0, 0])
+    ax2 = fig.add_subplot(gs[0, 1])
+    ax3 = fig.add_subplot(gs[0, 2])
+    ax4 = fig.add_subplot(gs[0, 3])
+    ax5 = fig.add_subplot(gs[0, 4])
 
 
 def disegna_impronta_e_piega(ax, cfg, perc_str, colore_bordo, colore_piega='#00ff00'):
@@ -798,7 +868,7 @@ if attiva_B:
     disegna_impronta_e_piega(ax1, cfg_B, f"{p_B:.1f}% OUT", 'cyan', colore_piega='#00ff00')
 
 ax1.set_title("1. Densità |J| e Stacco Barre (IN Oro / OUT Verde)", fontsize=11.5, weight='bold')
-ax1.set_xlabel("Larghezza X [mm]", fontsize=11, weight='bold')
+ax1.set_xlabel("Quota X [mm]", fontsize=11, weight='bold')
 ax1.set_ylabel("Quota Y [mm]", fontsize=11, weight='bold')
 ax1.set_xlim(0, B_piastra)
 ax1.set_ylim(0, H_piastra)
@@ -818,31 +888,46 @@ if attiva_B:
     disegna_impronta_e_piega(ax2, cfg_B, f"{p_B:.1f}% OUT", 'red', colore_piega='#00ff00')
 
 ax2.set_title("2. Potenziale Elettrico [mV]", fontsize=12, weight='bold')
-ax2.set_xlabel("Larghezza X [mm]", fontsize=11, weight='bold')
+ax2.set_xlabel("Quota X [mm]", fontsize=11, weight='bold')
 ax2.set_ylabel("Quota Y [mm]", fontsize=11, weight='bold')
 ax2.set_xlim(0, B_piastra)
 ax2.set_ylim(0, H_piastra)
 ax2.set_aspect('equal', adjustable='box')
 ax2.tick_params(labelsize=10)
 
-# 3. FLUSSO ASSIALE VERTICALE |Iy|
-ax3.plot(np.abs(res["profilo_Iy"]), res["y"], color='#d95f02', linewidth=2.4, label="|Iy(y)| in piastra")
-ax3.axhline(cfg_IN["y_sorm"], color='#cc5500', linestyle='-.', linewidth=1.6, label=f"Centro IN ({cfg_IN['y_sorm']:.0f} mm)")
-if attiva_A:
-    ax3.axhline(cfg_A["y_sorm"], color='blue', linestyle='--', linewidth=1.4, label=f"Centro A ({cfg_A['y_sorm']:.0f} mm)")
-if attiva_B:
-    ax3.axhline(cfg_B["y_sorm"], color='green', linestyle='--', linewidth=1.4, label=f"Centro B ({cfg_B['y_sorm']:.0f} mm)")
-ax3.axvline(mb_piastra["I_amm"], color='red', linestyle=':', linewidth=2.0, label=f"I_amm ({mb_piastra['I_amm']:.0f} A)")
-ax3.fill_betweenx(res["y"], 0, np.abs(res["profilo_Iy"]), color='#d95f02', alpha=0.2)
-ax3.set_title("3. Flusso Assiale |Iy| [A]", fontsize=12, weight='bold')
-ax3.set_xlabel("Corrente Assiale [A]", fontsize=11, weight='bold')
-ax3.set_ylabel("Quota Y [mm]", fontsize=11, weight='bold')
-ax3.set_ylim(0, H_piastra)
+# 3. PROFILO FLUSSO ASSIALE (|Ix(x)| SE ORIZZONTALE, |Iy(y)| SE VERTICALE)
+if is_piastra_orizz:
+    ax3.plot(res["x"], np.abs(res["profilo_Ix"]), color='#d95f02', linewidth=2.4, label="|Ix(x)| in piastra")
+    ax3.axvline(cfg_IN["x_sorm"], color='#cc5500', linestyle='-.', linewidth=1.6, label=f"Centro IN ({cfg_IN['x_sorm']:.0f} mm)")
+    if attiva_A:
+        ax3.axvline(cfg_A["x_sorm"], color='blue', linestyle='--', linewidth=1.4, label=f"Centro A ({cfg_A['x_sorm']:.0f} mm)")
+    if attiva_B:
+        ax3.axvline(cfg_B["x_sorm"], color='green', linestyle='--', linewidth=1.4, label=f"Centro B ({cfg_B['x_sorm']:.0f} mm)")
+    ax3.axhline(mb_piastra["I_amm"], color='red', linestyle=':', linewidth=2.0, label=f"I_amm ({mb_piastra['I_amm']:.0f} A)")
+    ax3.fill_between(res["x"], 0, np.abs(res["profilo_Ix"]), color='#d95f02', alpha=0.2)
+    ax3.set_title("3. Flusso Assiale Orizzontale |Ix(x)| [A]", fontsize=12, weight='bold')
+    ax3.set_xlabel("Lunghezza X [mm]", fontsize=11, weight='bold')
+    ax3.set_ylabel("Corrente Assiale [A]", fontsize=11, weight='bold')
+    ax3.set_xlim(0, B_piastra)
+else:
+    ax3.plot(np.abs(res["profilo_Iy"]), res["y"], color='#d95f02', linewidth=2.4, label="|Iy(y)| in piastra")
+    ax3.axhline(cfg_IN["y_sorm"], color='#cc5500', linestyle='-.', linewidth=1.6, label=f"Centro IN ({cfg_IN['y_sorm']:.0f} mm)")
+    if attiva_A:
+        ax3.axhline(cfg_A["y_sorm"], color='blue', linestyle='--', linewidth=1.4, label=f"Centro A ({cfg_A['y_sorm']:.0f} mm)")
+    if attiva_B:
+        ax3.axhline(cfg_B["y_sorm"], color='green', linestyle='--', linewidth=1.4, label=f"Centro B ({cfg_B['y_sorm']:.0f} mm)")
+    ax3.axvline(mb_piastra["I_amm"], color='red', linestyle=':', linewidth=2.0, label=f"I_amm ({mb_piastra['I_amm']:.0f} A)")
+    ax3.fill_betweenx(res["y"], 0, np.abs(res["profilo_Iy"]), color='#d95f02', alpha=0.2)
+    ax3.set_title("3. Flusso Assiale Verticale |Iy(y)| [A]", fontsize=12, weight='bold')
+    ax3.set_xlabel("Corrente Assiale [A]", fontsize=11, weight='bold')
+    ax3.set_ylabel("Quota Y [mm]", fontsize=11, weight='bold')
+    ax3.set_ylim(0, H_piastra)
+
 ax3.grid(True, linestyle='--', alpha=0.5)
 ax3.legend(loc='upper right', fontsize=9.0)
 ax3.tick_params(labelsize=10)
 
-# 4. PROIEZIONE LATERALE Y-Z (RAMO IN A SINISTRA Z<=0 | PIASTRA | RAMI A/B A DESTRA Z>=Zp)
+# 4. SEZIONE LATERALE Y-Z (RAMO IN A SINISTRA Z<=0 | PIASTRA | RAMI A/B A DESTRA Z>=Zp)
 L_DRAW_MAX = 150.0
 spess_tot_p = n_piastra * s_piastra + (n_piastra - 1) * d_piastra
 
@@ -954,7 +1039,12 @@ for cfg, colore, pc, corr_ramo in rami_uscita_plot:
         color=colore, fontsize=9.2, weight='bold', va='center', ha='left'
     )
 
-ax4.set_title("4. Sezione Laterale Y-Z (IN a Z≤0 | OUT a Z≥Zp)", fontsize=11.5, weight='bold')
+titolo_ax4 = (
+    "5. Sezione Trasversale Y-Z (IN a Z≤0 | OUT a Z≥Zp)"
+    if is_piastra_orizz
+    else "4. Sezione Laterale Y-Z (IN a Z≤0 | OUT a Z≥Zp)"
+)
+ax4.set_title(titolo_ax4, fontsize=11.5, weight='bold')
 ax4.set_xlabel("Profondità Z [mm]", fontsize=11, weight='bold')
 ax4.set_ylabel("Quota Y [mm]", fontsize=11, weight='bold')
 ax4.set_xlim(-(spess_sorm_z_in + L_DRAW_MAX + 170), spess_tot_p + max_spess_sorm_z_out + L_DRAW_MAX + 170)
@@ -962,7 +1052,7 @@ ax4.set_ylim(0, H_piastra)
 ax4.grid(True, linestyle=':', alpha=0.5)
 ax4.tick_params(labelsize=10)
 
-# 5. VISTA DALL'ALTO X-Z (IN LATO OPPOSTO Z<=0 + USCITE A/B Z>=Zp)
+# 5. VISTA X-Z (IN LATO OPPOSTO Z<=0 + USCITE A/B Z>=Zp)
 for idx_p in range(n_piastra):
     z0_p = idx_p * (s_piastra + d_piastra)
     ax5.add_patch(patches.Rectangle((0, z0_p), B_piastra, s_piastra, facecolor='#b87333', edgecolor='black', linewidth=1.2))
@@ -1071,8 +1161,13 @@ for cfg, colore, pc, corr_ramo in rami_uscita_plot:
 
 ax5.axvline(0, color='gray', linestyle=':', linewidth=0.8)
 ax5.axvline(B_piastra, color='gray', linestyle=':', linewidth=0.8)
-ax5.set_title("5. Pianta Meccanica X-Z (IN opposto a OUT)", fontsize=11.5, weight='bold')
-ax5.set_xlabel("Larghezza X [mm]", fontsize=11, weight='bold')
+titolo_ax5 = (
+    "4. Vista Longitudinale X-Z (IN opposto a OUT lungo X)"
+    if is_piastra_orizz
+    else "5. Pianta Meccanica X-Z (IN opposto a OUT)"
+)
+ax5.set_title(titolo_ax5, fontsize=11.5, weight='bold')
+ax5.set_xlabel("Quota X [mm]", fontsize=11, weight='bold')
 ax5.set_ylabel("Profondità Z [mm]", fontsize=11, weight='bold')
 ax5.set_xlim(-20, B_piastra + 20)
 ax5.set_ylim(-(spess_sorm_z_in + L_DRAW_MAX + 155), spess_tot_p + max_spess_sorm_z_out + L_DRAW_MAX + 155)
@@ -1269,10 +1364,16 @@ def crea_riga_report(nome_el, cfg_str, mb_obj, d_val, i_op, j_op, p_nodo_w):
     }
 
 
+descr_posa_piastra = (
+    f"{n_piastra}x({dim_trasv_piastra:.0f}x{s_piastra:.0f} mm) "
+    f"{'Svil. Orizzontale X' if is_piastra_orizz else 'Svil. Verticale Y'} - "
+    f"{'Di costa' if giacitura_costa_piastra else 'Di piatto'}"
+)
+
 righe_export = [
     crea_riga_report(
         "Piastra Collettrice",
-        f"{n_piastra}x({B_piastra:.0f}x{s_piastra:.0f} mm) Di costa",
+        descr_posa_piastra,
         mb_piastra, d_piastra if n_piastra > 1 else 0,
         I_sez_piastra_max, J_sez_piastra_max, res["P_piastra"]
     ),
@@ -1311,6 +1412,6 @@ csv_data = df_export.to_csv(index=False, sep=";").encode('utf-8')
 st.download_button(
     label="💾 Scarica Report Tecnico Unificato 2D FDM In/Out Opposti (CSV)",
     data=csv_data,
-    file_name=f"Report_Busbar_FDM_InOut_{config_rami.replace(' ', '').replace('+', 'e')}_{B_piastra:.0f}x{H_piastra:.0f}mm.csv",
+    file_name=f"Report_Busbar_FDM_{tag_orient}_{config_rami.replace(' ', '').replace('+', 'e')}_{B_piastra:.0f}x{H_piastra:.0f}mm.csv",
     mime="text/csv"
 )
